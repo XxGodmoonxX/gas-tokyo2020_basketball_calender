@@ -1,2 +1,1 @@
-# google-apps-script
-Google Apps Script
+gorin.jpでバスケの試合の日本戦（男子はアメリカ戦も含む）をとってきて、スプレットシートに記入しスプレットシートを元にGoogleカレンダーに転記するスクリプトを実装
