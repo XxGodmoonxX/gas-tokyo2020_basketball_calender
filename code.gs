@@ -16,14 +16,28 @@ const SHEET_NAME = 'GorinJpから出力するシート'
 /** URLから日程データを取得 */
 function getCalender(url) {
   const html = UrlFetchApp.fetch(url).getContentText()
-  const gameList = Parser.data(html).from('<div class="list-in">').to('</div>').iterate()
+  let lists = Parser.data(html).from('<section class="highlight-block not-medal-session">').to('</section>').iterate() // 準決勝まで
+  lists = [...lists, ...Parser.data(html).from('<section class="highlight-block medal-ss">').to('</section>').iterate()] // 決勝
+  let sourceData = [];
+  lists.map(list => {
+    const session = Parser.data(list).from('<h3 class="game-title">').to('</h3>').build()
+    const gameList = Parser.data(list).from('<div class="list-in">').to('</div>').iterate()
+    sourceData = [...sourceData, {
+      session: session,
+      gameList: gameList
+    }]
+  })
   let data = [];
-  gameList.map((game, index) => {
-    if(!game.match( url === URL.MEN ? /日本|米国/ : /日本/)) return // 男子だけはアメリカも含み、それ以外は日本以外無視
-    game = game.replace('<span> - </span>', '') // 不要な部分を削除
-    const time = Parser.data(game).from('<span class="ms">').to('</span>').build() // 時間を抜き出す ex: '7/29 13:40'
-    const competition =  Parser.data(game).from('<span>').to('</span>').build() // 対戦を抜き出す ex: '日本 vs スロベニア'
-    data = [...data, {time: time, competition: competition}]
+  sourceData.map((gameList) => {
+    gameList.gameList.map((game) => {
+      const session = gameList.session // セッションを抜き出す ex: 'バスケットボール男子準々決勝'
+      if(game.match( url === URL.MEN ? /日本|米国/ : /日本/) || session.match(/決勝/) || session.match(/3位決定戦/)) { // 予選は男子だけはアメリカも含み、それ以外は日本以外無視 準々決勝以降はすべて含む
+        game = game.replace('<span> - </span>', '') // 不要な部分を削除
+        const time = Parser.data(game).from('<span class="ms">').to('</span>').build() // 時間を抜き出す ex: '7/29 13:40'
+        const competition =  Parser.data(game).from('<span>').to('</span>').build() // 対戦を抜き出す ex: '日本 vs スロベニア'
+        data = [...data, {session: session, time: time, competition: competition}]
+      }
+    })
   })
   return data
 }
@@ -52,10 +66,10 @@ function postEventsToSheet() {
   }]
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   sheet.clear() // シートの中身を消す
-  sheet.appendRow(['種別', '開始時間', '対戦', 'URL'])
+  sheet.appendRow(['種別', '開始時間', '対戦', 'URL', 'セッション'])
   data.map((data) => { // dataを1つずつ処理
     data.calendar.map((calender) => { // data.calenderを1つずつ処理
-      sheet.appendRow([data.class, calender.time, calender.competition, data.url])
+      sheet.appendRow([data.class, calender.time, calender.competition, data.url, calender.session])
     })
   })
 }
@@ -68,7 +82,7 @@ function putCalenderEvents() {
   const data = sheet.getSheetValues(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn())
   data.map((data, index) => {
     /** タイトル */
-    const title = `東京オリンピック バスケットボール ${data[0]} ${data[2]}`
+    const title = `東京オリンピック ${data[4]} ${data[2]}`
     /** 開始時間 */
     const startDate = new Date(data[1])
     /** 3x3ではないとき試合は2時間 */
